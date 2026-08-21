@@ -3,101 +3,106 @@ from pydantic import BaseModel
 import joblib
 import re
 import pandas as pd
+from urllib.parse import urlparse
+import os
 
 app = FastAPI()
 
-tfidf = joblib.load(r'D:\Computer science\python lib\project\CyberShield-Threat Detector\model\tfidf_vectorizer.pkl')
-email_model = joblib.load(r'D:\Computer science\python lib\project\CyberShield-Threat Detector\model\email_model.pkl')
-url_model = joblib.load(r'D:\Computer science\python lib\project\CyberShield-Threat Detector\model\url_model.pkl')
+# MODEL PATHS
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+tfidf = joblib.load(os.path.join(BASE_DIR, "model", "tfidf", "vectorizer.pkl"))
+email_model = joblib.load(os.path.join(BASE_DIR, "model", "email", "email_model.pkl"))
+url_model = joblib.load(os.path.join(BASE_DIR, "model", "url", "url_model.pkl"))
+tld_encoded = joblib.load(os.path.join(BASE_DIR, "model", "tld", "tld_freq.pkl"))
+
+# INPUT SCHEMAS
 class EmailInput(BaseModel):
-    email_text:str
+    email_text: str
 
 class URLInput(BaseModel):
-    link:str
+    link: str
 
-
+# URL FEATURE ENGINEERING
 def extract_url_feature(url):
-    features = {}
+    url = str(url)
+    url_clean = re.sub(r'^https?://', '', url, flags=re.IGNORECASE)
 
-    features['url_length'] = len(url)
-    features['hyphen_count'] = url.count('-')
-    features['dot_count'] = url.count('.')
-    features['slash_count'] = url.count('/')
-    features['special_char_count'] = len(re.findall(r'[@?=&%]',url))
+    f = {}
+    f['url_length'] = len(url_clean)
+    f['hyphen_count'] = url_clean.count('-')
+    f['dot_count'] = url_clean.count('.')
+    f['slash_count'] = url_clean.count('/')
+    f['special_char_count'] = len(re.findall(r'[@?=&%]', url_clean))
+    f['has_at'] = int('@' in url_clean)
+    f['has_double_slash'] = int('//' in url_clean)
 
-    features['has_https'] = int(url.startswith('https'))
-    features['has_at'] = int('@' in url)
-    features['has_double_slash'] = int('//' in url)
+    domain_only = url_clean.split('/')[0]
+    f['subdomain_count'] = max(domain_only.count('.') - 1, 0)
 
-    domain_only = re.sub(r'https?//','',url).split('/')[0]
-
-    features['subdomain_count'] = domain_only.count(".")
-
-    if '?' in url:
-        features['query_length'] = len(url.split('?',1)[1])
-
-
+    if '?' in url_clean:
+        before_query, after_query = url_clean.split('?', 1)
+        f['query_length'] = len(after_query)
+        f['path_length'] = len(before_query.split('/', 1)[1]) if '/' in before_query else 0
     else:
-        features['query_length'] = 0
-
-
-    path_match = re.search(r'^https?://[^/]+(/[^?]*)',url)
-
-    if path_match:
-        features['path_length'] = len(path_match.group(1))
-    else:
-        features['path_length'] = 0
+        f['query_length'] = 0
+        f['path_length'] = len(url_clean.split('/', 1)[1]) if '/' in url_clean else 0
 
     keyword_pattern = r'login|verify|secure|bank|paypal|update|account|signin'
-
-    features['phishing_keyword'] = int(
-        bool(re.search(keyword_pattern,url,re.IGNORECASE))
-    )
+    f['phishing_keyword'] = int(bool(re.search(keyword_pattern, url_clean, re.IGNORECASE)))
 
     ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    f['has_ip'] = int(bool(re.search(ip_pattern, url_clean)))
 
-    features['has_ip'] = int(bool(re.search(ip_pattern,url)))
+    try:
+        hostname = urlparse('http://' + url_clean).hostname
+        if hostname and '.' in hostname:
+            tld = hostname.split('.')[-1].lower()
+            f['tld_encoded'] = tld_encoded.get(tld, 0)
+        else:
+            f['tld_encoded'] = 0
+    except Exception:
+        f['tld_encoded'] = 0
 
     feature_columns = [
-    "url_length",
-    "hyphen_count",
-    "dot_count",
-    "slash_count",
-    "special_char_count",
-    "has_https",
-    "has_at",
-    "has_double_slash",
-    "subdomain_count",
-    "query_length",
-    "path_length",
-    "phishing_keyword",
-    "has_ip"
-]
+        "url_length", "hyphen_count", "dot_count", "slash_count",
+        "special_char_count", "has_at", "has_double_slash",
+        "subdomain_count", "query_length", "path_length",
+        "phishing_keyword", "has_ip", "tld_encoded"
+    ]
 
-    return pd.DataFrame([features])[feature_columns]
+    return pd.DataFrame([f])[feature_columns]
 
-
+# EMAIL SCANNER
 @app.post('/scan-email')
 def check_email_logic(request: EmailInput):
     text = request.email_text
     vectorized_data = tfidf.transform([text])
-
     proba = email_model.predict_proba(vectorized_data)[0][1]
-    prediction = 'phishing' if proba >= 0.3 else'safe'
-
-    return {'status': prediction,'confidence':f'{proba * 100}%'}
-
-@app.post("/scan-url")
-def check_url(request: URLInput):
-
-    link = request.link
-
-    features = extract_url_feature(link)
-
-    prediction = url_model.predict(features)[0]
+    prediction = 'phishing' if proba >= 0.3 else 'safe'
 
     return {
-        "status": str(prediction),
+        'status': prediction,
+        'confidence': f'{proba * 100:.2f}%'
+    }
+
+# URL SCANNER
+@app.post('/scan-url')
+def check_url(request: URLInput):
+    link = request.link
+    features = extract_url_feature(link)
+    prediction = int(url_model.predict(features)[0])
+
+    label_map = {
+        0: "benign",
+        1: "phishing",
+        2: "defacement",
+        3: "malware"
+    }
+
+    status = label_map.get(prediction, "unknown")
+
+    return {
+        "status": status,
         "url": link
     }
