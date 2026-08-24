@@ -113,11 +113,19 @@ def check_email_logic(request: EmailInput):
 
     proba = email_model.predict_proba(vectorized_data)[0][1]
 
-    prediction = 'phishing' if proba >= 0.3 else 'safe'
+    if proba >= 0.70:
+        status = "high_risk_phishing"
+    else:
+        proba >= 0.30
+        status = "Safe"
+    # else:
+    #     status = "low_risk"
+
+    # prediction = 'phishing' if proba >= 0.3 else 'safe'
 
     return {
-        'status': prediction,
-        'confidence': f'{proba * 100:.2f}%'
+        'status': status,
+        'phishing_probability': f'{proba * 100:.2f}%'
     }
 
 
