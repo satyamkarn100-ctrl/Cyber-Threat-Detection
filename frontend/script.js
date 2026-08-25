@@ -11,5 +11,21 @@ async function scanEmail() {
     });
     let data = await response.json();
     document.getElementById('result').innerText =
-        data.status + " - " + data.confidence;
+        data.status + " - " + data.phishing_probability;
+}
+
+async function scanURL() {
+    let url = document.getElementById('url_input');
+    let response = await fetch("http://127.0.0.1:8000/scan-url", {
+        method: "POST",
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            link: url.value
+        })
+    })
+    let data = await response.json();
+    document.getElementById('url_result').innerText =
+        data.status
 }

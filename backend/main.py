@@ -99,35 +99,34 @@ def extract_url_feature(url):
     return pd.DataFrame([f])[feature_columns]
 
 # EMAIL SCANNER
-@app.post('/scan-email')
+@app.post("/scan-email")
 def check_email_logic(request: EmailInput):
 
     text = request.email_text
+
     vectorized_data = tfidf.transform([text])
 
     if vectorized_data.nnz == 0:
         return {
-            'status': 'low_signal',
-            'confidence': 'N/A'
+            "status": "low_signal",
+            "phishing_probability": "N/A"
         }
 
     proba = email_model.predict_proba(vectorized_data)[0][1]
 
     if proba >= 0.70:
         status = "high_risk_phishing"
-    else:
-        proba >= 0.30
-        status = "Safe"
-    # else:
-    #     status = "low_risk"
 
-    # prediction = 'phishing' if proba >= 0.3 else 'safe'
+    elif proba >= 0.40:
+        status = "suspicious"
+
+    else:
+        status = "Safe"
 
     return {
-        'status': status,
-        'phishing_probability': f'{proba * 100:.2f}%'
+        "status": status,
+        "phishing_probability": f"{proba * 100:.2f}%"
     }
-
 
 # URL SCANNER
 @app.post('/scan-url')
