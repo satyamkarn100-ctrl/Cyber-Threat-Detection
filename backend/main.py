@@ -22,10 +22,10 @@ app.add_middleware(
 # BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # LOAD MODELS
-tfidf = joblib.load(r'D:\Computer science\python lib\project\Cyber-Threat-Detection\model\tfidf_vectorizer.pkl')
-email_model = joblib.load(r'D:\Computer science\python lib\project\Cyber-Threat-Detection\model\email_rf_model.pkl')
-url_model = joblib.load(r'D:\Computer science\python lib\project\Cyber-Threat-Detection\model\url_model.pkl')
-tld_encoded = joblib.load(r'D:\Computer science\python lib\project\Cyber-Threat-Detection\model\tld_freq.pkl')
+tfidf = joblib.load(r'D:\Computer science\python lib\project\CYBER-THREAT-DETECTION1\model\tfidf_vectorizer.pkl')
+email_model = joblib.load(r'D:\Computer science\python lib\project\CYBER-THREAT-DETECTION1\model\email_rf_model.pkl')
+url_model = joblib.load(r'D:\Computer science\python lib\project\CYBER-THREAT-DETECTION1\model\url_model.pkl')
+tld_encoded = joblib.load(r'D:\Computer science\python lib\project\CYBER-THREAT-DETECTION1\model\tld_freq.pkl')
 
 # INPUT SCHEMAS
 class EmailInput(BaseModel):
@@ -139,7 +139,7 @@ def check_url(request: URLInput):
     prediction = int(url_model.predict(features)[0])
 
     label_map = {
-        0: "benign",
+        0: "Safe",
         1: "phishing",
         2: "defacement",
         3: "malware"
